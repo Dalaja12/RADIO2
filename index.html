@@ -1480,6 +1480,43 @@ rightBtn.addEventListener('click', () => {
             setupCarouselControls();
             renderAll();
         })();
+
+        function updateURL(radio) {
+    if (!radio) return;
+
+    // 🔥 limpiar nombre para URL
+    let slug = radio.name
+        .toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar acentos
+        .replace(/[^a-z0-9\s-]/g, "") // quitar caracteres raros
+        .trim()
+        .replace(/\s+/g, "-"); // espacios a guiones
+
+    const newUrl = "/" + slug;
+
+    history.replaceState(null, "", newUrl);
+}
+updateURL(radio);
+
+function playRadio(radio) {
+    if (currentRadio && currentRadio.id === radio.id && isPlaying) return;
+
+    audioPlayer.src = radio.stream;
+    audioPlayer.play();
+
+    currentRadio = radio;
+    currentPlayingId = radio.id;
+
+    updatePlayerUI(radio);
+
+    // 🔥 AQUÍ
+    updateURL(radio);
+
+    localStorage.setItem('radiosLibresLastRadioId', radio.id);
+    localStorage.setItem('radiosLibresWasPlaying', 'true');
+
+    renderAll();
+}
     </script>
 </body>
 </html>
