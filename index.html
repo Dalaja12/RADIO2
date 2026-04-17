@@ -279,13 +279,6 @@
             50% { transform: scaleY(1); }
         }
 
-        .progress-container {
-            flex: 1;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
         .progress-bar {
             flex: 1;
             height: 5px;
@@ -662,18 +655,6 @@
             line-height: 1.6;
             font-size: 1rem;
         }
-        
-        .empty-carousel .empty-heart {
-            color: var(--accent-red);
-            font-size: 1.2rem;
-            display: inline-block;
-            animation: heartBeat 1s ease-in-out infinite;
-        }
-        
-        @keyframes heartBeat {
-            0%, 100% { transform: scale(1); }
-            50% { transform: scale(1.2); }
-        }
 
         .radios-grid {
             display: grid;
@@ -1020,25 +1001,19 @@
 
     <script>
         (function() {
-            // ========== FUNCIÓN PARA FIJAR HEADER Y PLAYER BAR ==========
+            // ========== AJUSTE DE POSICIONES FIJAS ==========
             function adjustFixedPositions() {
                 const header = document.querySelector('header');
                 const playerBar = document.querySelector('.player-bar');
                 if (!header || !playerBar) return;
-                
                 const headerHeight = header.offsetHeight;
                 playerBar.style.top = headerHeight + 'px';
-                
-                const playerHeight = playerBar.offsetHeight;
-                const totalFixedHeight = headerHeight + playerHeight;
-                document.body.style.paddingTop = totalFixedHeight + 'px';
+                document.body.style.paddingTop = (headerHeight + playerBar.offsetHeight) + 'px';
             }
-            
             window.addEventListener('load', adjustFixedPositions);
             window.addEventListener('resize', adjustFixedPositions);
-            const observer = new MutationObserver(adjustFixedPositions);
-            observer.observe(document.body, { attributes: true, childList: true, subtree: false });
-            
+            new MutationObserver(adjustFixedPositions).observe(document.body, { attributes: true, childList: true });
+
             // ========== DATOS DE RADIOS ==========
             const radiosData = [
                 { id:1, name:"La Colifata", location:"Apizaco", description:"Primera radio del mundo en transmitir desde un hospital psiquiátrico.", logo:"https://ui-avatars.com/api/?name=La+Colifata&background=8e44ad&color=fff&size=96", favorite:false, stream:"https://stream.zeno.fm/1m42oahahycvv", social:{ facebook:"https://facebook.com/", whatsapp:"https://wa.me/", tiktok:"https://tiktok.com/", instagram:"https://instagram.com/" } },
@@ -1053,45 +1028,48 @@
                 { id:10, name:"Radio Comunera", location:"San Salvador, El Salvador", description:"La voz de la comunidad, educación y cultura popular.", logo:"https://ui-avatars.com/api/?name=Radio+Comunera&background=e74c3c&color=fff&size=96", favorite:false, stream:"https://stream.zeno.fm/1m42oahahycvv", social:{ facebook:"https://facebook.com/", whatsapp:"https://wa.me/", tiktok:"https://tiktok.com/", instagram:"https://instagram.com/" } }
             ];
 
-            // Cargar favoritos desde localStorage
+            // Cargar favoritos guardados
             const savedFavorites = localStorage.getItem('radiosLibresFavorites');
             if (savedFavorites) {
                 const favoritesIds = JSON.parse(savedFavorites);
                 radiosData.forEach(r => r.favorite = favoritesIds.includes(r.id));
             }
 
-            // ========== NUEVA FUNCIÓN: SLUGIFY ==========
+            // ========== FUNCIONES PARA SLUG Y URL ==========
             function slugify(text) {
                 return text
                     .toLowerCase()
-                    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // eliminar acentos
-                    .replace(/[^a-z0-9\s-]/g, "")                    // eliminar caracteres especiales
+                    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                    .replace(/[^a-z0-9\s-]/g, "")
                     .trim()
-                    .replace(/\s+/g, "-");                           // espacios a guiones
+                    .replace(/\s+/g, "-");
             }
 
-            // ========== ACTUALIZAR URL SEGÚN RADIO ACTUAL ==========
+            // Actualizar URL (solo cuando se reproduce una radio)
             function updateURL(radio) {
                 if (!radio) return;
                 const slug = slugify(radio.name);
                 const newPath = `/${slug}`;
+                // Evitar actualizar si ya estamos en esa URL
                 if (window.location.pathname !== newPath) {
                     history.pushState({ radioId: radio.id }, '', newPath);
                 }
                 document.title = `${radio.name} · Frecuencias Libres`;
             }
 
-            // ========== OBTENER RADIO DESDE LA URL ACTUAL ==========
+            // Obtener radio desde la URL actual (slug)
             function getRadioFromPath() {
-                const path = window.location.pathname.slice(1); // quitar la barra inicial
+                const path = window.location.pathname.slice(1);
                 if (!path) return null;
                 return radiosData.find(radio => slugify(radio.name) === path);
             }
 
-            // ========== REPRODUCIR RADIO (MODIFICADA) ==========
+            // ========== REPRODUCTOR ==========
             let currentPlayingId = null;
             let currentFilter = '';
             let currentPage = 0;
+            let isPlaying = false;
+            let currentRadio = null;
 
             const audioPlayer = new Audio();
             const playPauseBtn = document.getElementById('playPauseBtn');
@@ -1106,34 +1084,33 @@
             const waveOverlay = document.getElementById('waveOverlay');
             const carouselWrapper = document.getElementById('carouselWrapper');
 
-            let isPlaying = false;
-            let currentRadio = null;
-
-            // Determinar radio inicial (prioridad: URL > localStorage > primera)
+            // Determinar radio inicial según la URL (si existe) o por defecto
             const radioFromUrl = getRadioFromPath();
             if (radioFromUrl) {
                 currentRadio = radioFromUrl;
+                // Si venimos de un slug, actualizamos el título y la UI (pero NO volvemos a cambiar la URL)
+                document.title = `${currentRadio.name} · Frecuencias Libres`;
             } else {
-                const lastRadioId = localStorage.getItem('radiosLibresLastRadioId');
-                if (lastRadioId) {
-                    const found = radiosData.find(r => r.id === parseInt(lastRadioId));
-                    currentRadio = found || radiosData[0];
-                } else {
-                    currentRadio = radiosData[0];
+                // Si es la raíz, seleccionamos la primera radio pero NO cambiamos la URL
+                currentRadio = radiosData[0];
+                // Aseguramos que la URL se quede como "/"
+                if (window.location.pathname !== '/') {
+                    history.replaceState(null, '', '/');
                 }
-                // Si no había URL, la actualizamos para que coincida con el radio cargado
-                updateURL(currentRadio);
+                document.title = 'Frecuencias Libres';
             }
-            currentPlayingId = currentRadio.id;
 
+            currentPlayingId = currentRadio.id;
             audioPlayer.src = currentRadio.stream;
             audioPlayer.volume = volumeSlider.value;
             updatePlayerUI(currentRadio);
 
-            // Intentar auto-reproducir si venía de una URL directa o de último estado
-            const shouldAutoPlay = radioFromUrl || (localStorage.getItem('radiosLibresWasPlaying') === 'true');
-            if (shouldAutoPlay) {
+            // Solo auto-reproducir si venimos de un slug (para que al entrar directo suene)
+            if (radioFromUrl) {
                 audioPlayer.play().catch(e => console.log("Autoplay bloqueado:", e));
+            } else {
+                // Si es raíz, NO se reproduce automáticamente
+                localStorage.setItem('radiosLibresWasPlaying', 'false');
             }
 
             function updatePlayerUI(radio) {
@@ -1219,6 +1196,7 @@
                 }
             });
 
+            // Función principal para reproducir una radio (actualiza URL, guarda estado)
             function playRadio(radio) {
                 if (currentRadio && currentRadio.id === radio.id && isPlaying) return;
                 audioPlayer.src = radio.stream;
@@ -1228,7 +1206,7 @@
                 updatePlayerUI(radio);
                 localStorage.setItem('radiosLibresLastRadioId', radio.id);
                 localStorage.setItem('radiosLibresWasPlaying', 'true');
-                updateURL(radio);   // <-- Cambia la URL sin recargar
+                updateURL(radio);   // Cambia la URL (solo aquí)
                 renderAll();
             }
 
@@ -1238,33 +1216,35 @@
                 if (radioFromPop && (!currentRadio || currentRadio.id !== radioFromPop.id)) {
                     playRadio(radioFromPop);
                 } else if (!radioFromPop && currentRadio) {
-                    // Si la URL raíz, no hacemos nada o podríamos resetear a la primera radio
+                    // Si se vuelve a la raíz, podemos resetear a la primera radio sin cambiar URL
+                    const defaultRadio = radiosData[0];
+                    if (defaultRadio.id !== currentRadio.id) {
+                        playRadio(defaultRadio);
+                    }
+                    // Aseguramos que el título sea el genérico
+                    document.title = 'Frecuencias Libres';
                 }
             });
 
-            // ========== FUNCIONES DE RENDERIZADO (CARRUSEL, GRID) ==========
+            // ========== FUNCIONES DE RENDERIZADO (CARRUSEL Y GRID) ==========
             function updateCarouselIndicators() {
                 const indicatorsContainer = document.getElementById('carouselIndicators');
                 if (!indicatorsContainer) return;
-                
                 const favorites = radiosData.filter(r => r.favorite);
                 if (favorites.length === 0) {
                     indicatorsContainer.innerHTML = '';
                     return;
                 }
-                
                 const scrollLeft = carouselWrapper.scrollLeft;
                 const cardWidth = 304;
                 const scrollPosition = scrollLeft / cardWidth;
                 const activeIndex = Math.round(scrollPosition);
-                
                 let indicatorsHtml = '';
                 for (let i = 0; i < favorites.length; i++) {
                     const isActive = i === activeIndex;
                     indicatorsHtml += `<div class="carousel-dot ${isActive ? 'active' : ''}" data-index="${i}"></div>`;
                 }
                 indicatorsContainer.innerHTML = indicatorsHtml;
-                
                 document.querySelectorAll('.carousel-dot').forEach(dot => {
                     dot.addEventListener('click', (e) => {
                         const index = parseInt(e.currentTarget.dataset.index);
@@ -1277,7 +1257,6 @@
             function renderFavoritesCarousel() {
                 const favorites = radiosData.filter(r => r.favorite);
                 const container = document.getElementById('favoritesCarousel');
-
                 if (favorites.length === 0) {
                     container.innerHTML = `
                         <div class="empty-carousel-wrapper">
@@ -1291,15 +1270,12 @@
                     document.getElementById('carouselIndicators').innerHTML = '';
                     return;
                 }
-
                 const perPage = window.innerWidth <= 768 ? 1 : 3;
                 const totalPages = Math.ceil(favorites.length / perPage);
                 if (currentPage >= totalPages) currentPage = totalPages - 1;
                 if (currentPage < 0) currentPage = 0;
-
                 const start = currentPage * perPage;
                 const visible = favorites.slice(start, start + perPage);
-
                 let html = '';
                 visible.forEach(radio => {
                     const isActive = currentPlayingId === radio.id;
@@ -1315,10 +1291,8 @@
                         </div>
                     `;
                 });
-
                 container.innerHTML = html;
                 attachCarouselListeners();
-
                 let dots = '';
                 if (window.innerWidth <= 768) {
                     dots = `<div class="carousel-dot active"></div>`;
@@ -1328,7 +1302,6 @@
                     }
                 }
                 document.getElementById('carouselIndicators').innerHTML = dots;
-
                 document.querySelectorAll('.carousel-dot').forEach(dot => {
                     dot.addEventListener('click', (e) => {
                         if (window.innerWidth <= 768) return;
@@ -1460,7 +1433,6 @@
             function setupCarouselControls() {
                 const leftBtn = document.getElementById('carouselLeft');
                 const rightBtn = document.getElementById('carouselRight');
-                
                 leftBtn.addEventListener('click', () => {
                     const favorites = radiosData.filter(r => r.favorite);
                     const perPage = window.innerWidth <= 768 ? 1 : 3;
@@ -1470,7 +1442,6 @@
                         renderFavoritesCarousel();
                     }
                 });
-
                 rightBtn.addEventListener('click', () => {
                     const favorites = radiosData.filter(r => r.favorite);
                     const perPage = window.innerWidth <= 768 ? 1 : 3;
@@ -1484,17 +1455,14 @@
 
             const searchInput = document.getElementById('searchInput');
             const searchButton = document.getElementById('searchButton');
-
             function filterRadios() {
                 currentFilter = searchInput.value.trim();
                 renderAll();
             }
-
             searchButton.addEventListener('click', (e) => {
                 e.preventDefault();
                 filterRadios();
             });
-
             searchInput.addEventListener('keyup', (e) => {
                 if (e.key === 'Enter') filterRadios();
             });
