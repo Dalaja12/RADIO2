@@ -18,11 +18,9 @@
             line-height: 1.5;
             position: relative;
             overflow-x: hidden;
-            /* El padding-top se aplicará dinámicamente con JS para evitar que el contenido quede bajo los elementos fijos */
             padding-top: 0;
         }
 
-        /* Ondas de fondo */
         body::before {
             content: '';
             position: fixed;
@@ -52,9 +50,6 @@
             padding: 0 24px;
         }
 
-        /* ============================================
-           HEADER FIJO (NUNCA BAJA AL HACER SCROLL)
-        ============================================ */
         header {
             position: fixed;
             top: 0;
@@ -146,9 +141,6 @@
             color: var(--pure-white);
         }
 
-        /* ============================================
-           REPRODUCTOR FIJO (DEBAJO DEL HEADER, TAMBIÉN FIJO)
-        ============================================ */
         .player-bar {
             position: fixed;
             left: 0;
@@ -159,12 +151,10 @@
             padding: 12px 0;
             z-index: 999;
             box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-            /* El valor 'top' se asignará dinámicamente con JS para que siempre quede justo debajo del header */
             top: 0;
             transition: top 0.1s ease;
         }
 
-        /* Ajuste responsive para móviles: el JS manejará el top dinámico */
         @media (max-width: 768px) {
             header {
                 padding: 12px 0;
@@ -183,7 +173,6 @@
             }
         }
 
-        /* ====== ESTILOS DEL CONTENIDO PRINCIPAL (SIN MODIFICAR) ====== */
         .player-container {
             display: flex;
             align-items: center;
@@ -933,8 +922,8 @@
             100% { box-shadow: 0 0 0 0 rgba(255,77,77,0); transform: scale(1); }
         }
         .carousel-wrapper {
-    overflow: hidden;
-}
+            overflow: hidden;
+        }
     </style>
 </head>
 <body>
@@ -1031,31 +1020,26 @@
 
     <script>
         (function() {
-            // ========== FUNCIÓN PARA FIJAR HEADER Y PLAYER BAR (NUNCA BAJAN) ==========
+            // ========== FUNCIÓN PARA FIJAR HEADER Y PLAYER BAR ==========
             function adjustFixedPositions() {
                 const header = document.querySelector('header');
                 const playerBar = document.querySelector('.player-bar');
                 if (!header || !playerBar) return;
                 
-                // Obtener altura real del header (incluye padding, márgenes)
                 const headerHeight = header.offsetHeight;
-                // Colocar el player-bar justo debajo del header
                 playerBar.style.top = headerHeight + 'px';
                 
-                // Ajustar padding-top del body para que el contenido no quede oculto
                 const playerHeight = playerBar.offsetHeight;
                 const totalFixedHeight = headerHeight + playerHeight;
                 document.body.style.paddingTop = totalFixedHeight + 'px';
             }
             
-            // Ejecutar al cargar la página y cada vez que se redimensione
             window.addEventListener('load', adjustFixedPositions);
             window.addEventListener('resize', adjustFixedPositions);
-            // También cuando haya cambios en el DOM que puedan afectar altura (como render del carrusel)
             const observer = new MutationObserver(adjustFixedPositions);
             observer.observe(document.body, { attributes: true, childList: true, subtree: false });
             
-            // ========== LÓGICA ORIGINAL DE RADIOS ==========
+            // ========== DATOS DE RADIOS ==========
             const radiosData = [
                 { id:1, name:"La Colifata", location:"Apizaco", description:"Primera radio del mundo en transmitir desde un hospital psiquiátrico.", logo:"https://ui-avatars.com/api/?name=La+Colifata&background=8e44ad&color=fff&size=96", favorite:false, stream:"https://stream.zeno.fm/1m42oahahycvv", social:{ facebook:"https://facebook.com/", whatsapp:"https://wa.me/", tiktok:"https://tiktok.com/", instagram:"https://instagram.com/" } },
                 { id:2, name:"Radio Wvox Fm", location:"Apizaco, Tlax.", description:" Emisora de radio digital líder en innovación y entretenimiento.", logo:"Logos/Radio Wvox Fm.png", favorite:false, stream:"https://stream.zeno.fm/1m42oahahycvv", social:{ facebook:"https://facebook.com/", whatsapp:"https://wa.me/", tiktok:"https://tiktok.com/", instagram:"https://instagram.com/" } },
@@ -1069,14 +1053,44 @@
                 { id:10, name:"Radio Comunera", location:"San Salvador, El Salvador", description:"La voz de la comunidad, educación y cultura popular.", logo:"https://ui-avatars.com/api/?name=Radio+Comunera&background=e74c3c&color=fff&size=96", favorite:false, stream:"https://stream.zeno.fm/1m42oahahycvv", social:{ facebook:"https://facebook.com/", whatsapp:"https://wa.me/", tiktok:"https://tiktok.com/", instagram:"https://instagram.com/" } }
             ];
 
+            // Cargar favoritos desde localStorage
             const savedFavorites = localStorage.getItem('radiosLibresFavorites');
             if (savedFavorites) {
                 const favoritesIds = JSON.parse(savedFavorites);
                 radiosData.forEach(r => r.favorite = favoritesIds.includes(r.id));
             }
 
-            let currentFilter = '';
+            // ========== NUEVA FUNCIÓN: SLUGIFY ==========
+            function slugify(text) {
+                return text
+                    .toLowerCase()
+                    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // eliminar acentos
+                    .replace(/[^a-z0-9\s-]/g, "")                    // eliminar caracteres especiales
+                    .trim()
+                    .replace(/\s+/g, "-");                           // espacios a guiones
+            }
+
+            // ========== ACTUALIZAR URL SEGÚN RADIO ACTUAL ==========
+            function updateURL(radio) {
+                if (!radio) return;
+                const slug = slugify(radio.name);
+                const newPath = `/${slug}`;
+                if (window.location.pathname !== newPath) {
+                    history.pushState({ radioId: radio.id }, '', newPath);
+                }
+                document.title = `${radio.name} · Frecuencias Libres`;
+            }
+
+            // ========== OBTENER RADIO DESDE LA URL ACTUAL ==========
+            function getRadioFromPath() {
+                const path = window.location.pathname.slice(1); // quitar la barra inicial
+                if (!path) return null;
+                return radiosData.find(radio => slugify(radio.name) === path);
+            }
+
+            // ========== REPRODUCIR RADIO (MODIFICADA) ==========
             let currentPlayingId = null;
+            let currentFilter = '';
             let currentPage = 0;
 
             const audioPlayer = new Audio();
@@ -1095,15 +1109,20 @@
             let isPlaying = false;
             let currentRadio = null;
 
-            const lastRadioId = localStorage.getItem('radiosLibresLastRadioId');
-            const lastWasPlaying = localStorage.getItem('radiosLibresWasPlaying') === 'true';
-            
-            if (lastRadioId) {
-                const found = radiosData.find(r => r.id === parseInt(lastRadioId));
-                if (found) currentRadio = found;
-                else currentRadio = radiosData[0];
+            // Determinar radio inicial (prioridad: URL > localStorage > primera)
+            const radioFromUrl = getRadioFromPath();
+            if (radioFromUrl) {
+                currentRadio = radioFromUrl;
             } else {
-                currentRadio = radiosData[0];
+                const lastRadioId = localStorage.getItem('radiosLibresLastRadioId');
+                if (lastRadioId) {
+                    const found = radiosData.find(r => r.id === parseInt(lastRadioId));
+                    currentRadio = found || radiosData[0];
+                } else {
+                    currentRadio = radiosData[0];
+                }
+                // Si no había URL, la actualizamos para que coincida con el radio cargado
+                updateURL(currentRadio);
             }
             currentPlayingId = currentRadio.id;
 
@@ -1111,8 +1130,10 @@
             audioPlayer.volume = volumeSlider.value;
             updatePlayerUI(currentRadio);
 
-            if (lastWasPlaying) {
-                audioPlayer.play().catch(() => {});
+            // Intentar auto-reproducir si venía de una URL directa o de último estado
+            const shouldAutoPlay = radioFromUrl || (localStorage.getItem('radiosLibresWasPlaying') === 'true');
+            if (shouldAutoPlay) {
+                audioPlayer.play().catch(e => console.log("Autoplay bloqueado:", e));
             }
 
             function updatePlayerUI(radio) {
@@ -1207,9 +1228,21 @@
                 updatePlayerUI(radio);
                 localStorage.setItem('radiosLibresLastRadioId', radio.id);
                 localStorage.setItem('radiosLibresWasPlaying', 'true');
+                updateURL(radio);   // <-- Cambia la URL sin recargar
                 renderAll();
             }
 
+            // Navegación con botones atrás/adelante
+            window.addEventListener('popstate', (event) => {
+                const radioFromPop = getRadioFromPath();
+                if (radioFromPop && (!currentRadio || currentRadio.id !== radioFromPop.id)) {
+                    playRadio(radioFromPop);
+                } else if (!radioFromPop && currentRadio) {
+                    // Si la URL raíz, no hacemos nada o podríamos resetear a la primera radio
+                }
+            });
+
+            // ========== FUNCIONES DE RENDERIZADO (CARRUSEL, GRID) ==========
             function updateCarouselIndicators() {
                 const indicatorsContainer = document.getElementById('carouselIndicators');
                 if (!indicatorsContainer) return;
@@ -1242,76 +1275,68 @@
             }
 
             function renderFavoritesCarousel() {
-    const favorites = radiosData.filter(r => r.favorite);
-    const container = document.getElementById('favoritesCarousel');
+                const favorites = radiosData.filter(r => r.favorite);
+                const container = document.getElementById('favoritesCarousel');
 
-    if (favorites.length === 0) {
-        container.innerHTML = `
-            <div class="empty-carousel-wrapper">
-                <div class="empty-carousel">
-                    <span class="empty-icon">✨🎵✨</span>
-                    <div class="empty-title">Aún no tienes radios favoritas</div>
-                    <div class="empty-message-text">
-                        Haz clic en el ❤️ de alguna radio
-                    </div>
-                </div>
-            </div>
-        `;
-        document.getElementById('carouselIndicators').innerHTML = '';
-        return;
-    }
+                if (favorites.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-carousel-wrapper">
+                            <div class="empty-carousel">
+                                <span class="empty-icon">✨🎵✨</span>
+                                <div class="empty-title">Aún no tienes radios favoritas</div>
+                                <div class="empty-message-text">Haz clic en el ❤️ de alguna radio</div>
+                            </div>
+                        </div>
+                    `;
+                    document.getElementById('carouselIndicators').innerHTML = '';
+                    return;
+                }
 
-    const perPage = window.innerWidth <= 768 ? 1 : 3;
-    const totalPages = Math.ceil(favorites.length / perPage);
+                const perPage = window.innerWidth <= 768 ? 1 : 3;
+                const totalPages = Math.ceil(favorites.length / perPage);
+                if (currentPage >= totalPages) currentPage = totalPages - 1;
+                if (currentPage < 0) currentPage = 0;
 
-    // 🔥 evitar overflow de página
-    if (currentPage >= totalPages) currentPage = totalPages - 1;
+                const start = currentPage * perPage;
+                const visible = favorites.slice(start, start + perPage);
 
-    const start = currentPage * perPage;
-    const visible = favorites.slice(start, start + perPage);
+                let html = '';
+                visible.forEach(radio => {
+                    const isActive = currentPlayingId === radio.id;
+                    html += `
+                        <div class="carousel-card ${isActive ? 'active' : ''}" data-id="${radio.id}">
+                            <button class="carousel-favorite-btn active" data-id="${radio.id}">❤️</button>
+                            <div class="carousel-logo">
+                                <img src="${radio.logo}">
+                            </div>
+                            <h3 class="carousel-name">${radio.name}</h3>
+                            <div class="carousel-location">📍 ${radio.location}</div>
+                            <button class="carousel-play-btn" data-id="${radio.id}">▶ Escuchar</button>
+                        </div>
+                    `;
+                });
 
-    let html = '';
-    visible.forEach(radio => {
-        const isActive = currentPlayingId === radio.id;
-        html += `
-            <div class="carousel-card ${isActive ? 'active' : ''}" data-id="${radio.id}">
-                <button class="carousel-favorite-btn active" data-id="${radio.id}">❤️</button>
-                <div class="carousel-logo">
-                    <img src="${radio.logo}">
-                </div>
-                <h3 class="carousel-name">${radio.name}</h3>
-                <div class="carousel-location">📍 ${radio.location}</div>
-                <button class="carousel-play-btn" data-id="${radio.id}">▶ Escuchar</button>
-            </div>
-        `;
-    });
+                container.innerHTML = html;
+                attachCarouselListeners();
 
-    container.innerHTML = html;
+                let dots = '';
+                if (window.innerWidth <= 768) {
+                    dots = `<div class="carousel-dot active"></div>`;
+                } else {
+                    for (let i = 0; i < totalPages; i++) {
+                        dots += `<div class="carousel-dot ${i === currentPage ? 'active' : ''}" data-index="${i}"></div>`;
+                    }
+                }
+                document.getElementById('carouselIndicators').innerHTML = dots;
 
-    attachCarouselListeners();
-
-    // 🔥 indicadores
-    let dots = '';
-
-// 🔥 SI ES MÓVIL → SOLO 1 PUNTO
-if (window.innerWidth <= 768) {
-    dots = `<div class="carousel-dot active"></div>`;
-} else {
-    for (let i = 0; i < totalPages; i++) {
-        dots += `<div class="carousel-dot ${i === currentPage ? 'active' : ''}" data-index="${i}"></div>`;
-    }
-}
-
-document.getElementById('carouselIndicators').innerHTML = dots;
-
-
-    document.querySelectorAll('.carousel-dot').forEach(dot => {
-        dot.addEventListener('click', (e) => {
-            currentPage = parseInt(e.currentTarget.dataset.index);
-            renderFavoritesCarousel();
-        });
-    });
-}
+                document.querySelectorAll('.carousel-dot').forEach(dot => {
+                    dot.addEventListener('click', (e) => {
+                        if (window.innerWidth <= 768) return;
+                        currentPage = parseInt(e.currentTarget.dataset.index);
+                        renderFavoritesCarousel();
+                    });
+                });
+            }
 
             function attachCarouselListeners() {
                 document.querySelectorAll('.carousel-favorite-btn').forEach(btn => {
@@ -1429,7 +1454,6 @@ document.getElementById('carouselIndicators').innerHTML = dots;
                 );
                 renderFavoritesCarousel();
                 renderAllRadios(filtered);
-                // Reajustar posiciones por si hubo cambios de altura al renderizar imágenes
                 setTimeout(adjustFixedPositions, 50);
             }
 
@@ -1438,26 +1462,24 @@ document.getElementById('carouselIndicators').innerHTML = dots;
                 const rightBtn = document.getElementById('carouselRight');
                 
                 leftBtn.addEventListener('click', () => {
-    const favorites = radiosData.filter(r => r.favorite);
-    const perPage = window.innerWidth <= 768 ? 1 : 3;
-    const totalPages = Math.ceil(favorites.length / perPage);
+                    const favorites = radiosData.filter(r => r.favorite);
+                    const perPage = window.innerWidth <= 768 ? 1 : 3;
+                    const totalPages = Math.ceil(favorites.length / perPage);
+                    if (currentPage > 0) {
+                        currentPage--;
+                        renderFavoritesCarousel();
+                    }
+                });
 
-    if (currentPage > 0) {
-        currentPage--;
-        renderFavoritesCarousel();
-    }
-});
-
-rightBtn.addEventListener('click', () => {
-    const favorites = radiosData.filter(r => r.favorite);
-    const perPage = window.innerWidth <= 768 ? 1 : 3;
-    const totalPages = Math.ceil(favorites.length / perPage);
-
-    if (currentPage < totalPages - 1) {
-        currentPage++;
-        renderFavoritesCarousel();
-    }
-});
+                rightBtn.addEventListener('click', () => {
+                    const favorites = radiosData.filter(r => r.favorite);
+                    const perPage = window.innerWidth <= 768 ? 1 : 3;
+                    const totalPages = Math.ceil(favorites.length / perPage);
+                    if (currentPage < totalPages - 1) {
+                        currentPage++;
+                        renderFavoritesCarousel();
+                    }
+                });
             }
 
             const searchInput = document.getElementById('searchInput');
@@ -1480,43 +1502,6 @@ rightBtn.addEventListener('click', () => {
             setupCarouselControls();
             renderAll();
         })();
-
-        function updateURL(radio) {
-    if (!radio) return;
-
-    // 🔥 limpiar nombre para URL
-    let slug = radio.name
-        .toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // quitar acentos
-        .replace(/[^a-z0-9\s-]/g, "") // quitar caracteres raros
-        .trim()
-        .replace(/\s+/g, "-"); // espacios a guiones
-
-    const newUrl = "/" + slug;
-
-    history.replaceState(null, "", newUrl);
-}
-updateURL(radio);
-
-function playRadio(radio) {
-    if (currentRadio && currentRadio.id === radio.id && isPlaying) return;
-
-    audioPlayer.src = radio.stream;
-    audioPlayer.play();
-
-    currentRadio = radio;
-    currentPlayingId = radio.id;
-
-    updatePlayerUI(radio);
-
-    // 🔥 AQUÍ
-    updateURL(radio);
-
-    localStorage.setItem('radiosLibresLastRadioId', radio.id);
-    localStorage.setItem('radiosLibresWasPlaying', 'true');
-
-    renderAll();
-}
     </script>
 </body>
 </html>
